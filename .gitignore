@@ -140,4 +140,7 @@ vite.config.ts.timestamp-*
 
 build/
 */.DS_Store
+
+# SQLite database for sign in / scores (server/api.ts)
+data/
 .vercel/

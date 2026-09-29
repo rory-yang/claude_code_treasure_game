@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Button } from './components/ui/button';
+import { AuthScreen } from './components/AuthScreen';
+import { ScoreHistory } from './components/ScoreHistory';
+import { fetchSession, saveScore, signOut, type Session, type Stats, type User } from './api';
 import closedChest from './assets/treasure_closed.png';
 import treasureChest from './assets/treasure_opened.png';
 import skeletonChest from './assets/treasure_opened_skeleton.png';
@@ -14,10 +17,18 @@ interface Box {
   hasTreasure: boolean;
 }
 
+// Guests play without any data being stored; signed-in users get their scores saved to SQLite
+type Player = { kind: 'guest' } | { kind: 'user'; user: User };
+type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
 export default function App() {
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [score, setScore] = useState(0);
   const [gameEnded, setGameEnded] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [player, setPlayer] = useState<Player | null>(null);
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
 
   const initializeGame = () => {
     // Randomly assign treasure to one box
@@ -31,12 +42,58 @@ export default function App() {
     setBoxes(newBoxes);
     setScore(0);
     setGameEnded(false);
+    setSaveStatus('idle');
   };
 
-  // Initialize game automatically when component mounts
+  // Initialize game and restore an existing login session when component mounts
   useEffect(() => {
     initializeGame();
+    fetchSession()
+      .then((session) => {
+        if (session.user) {
+          setPlayer({ kind: 'user', user: session.user });
+          setStats(session.stats);
+        }
+      })
+      // API unreachable (e.g. static hosting): fall back to the auth screen, guest mode still works
+      .catch(() => {})
+      .finally(() => setSessionChecked(true));
   }, []);
+
+  // Save the final score once per finished game, only for signed-in players
+  useEffect(() => {
+    if (!gameEnded || player?.kind !== 'user') return;
+    setSaveStatus('saving');
+    saveScore(score)
+      .then(({ stats }) => {
+        setStats(stats);
+        setSaveStatus('saved');
+      })
+      .catch(() => setSaveStatus('error'));
+  }, [gameEnded]);
+
+  // Start a fresh game as a signed-in user. Input: session returned by sign in / sign up. Output: none
+  const handleAuthenticated = (session: Session) => {
+    if (!session.user) return;
+    setPlayer({ kind: 'user', user: session.user });
+    setStats(session.stats);
+    initializeGame();
+  };
+
+  // Start a fresh game in guest mode (nothing is sent to the server). Output: none
+  const handlePlayAsGuest = () => {
+    setPlayer({ kind: 'guest' });
+    setStats(null);
+    initializeGame();
+  };
+
+  // Sign out (if signed in) and return to the auth screen. Output: none
+  const handleLeave = async () => {
+    if (player?.kind === 'user') await signOut().catch(() => {});
+    setPlayer(null);
+    setStats(null);
+    initializeGame();
+  };
 
   const openBox = (boxId: number) => {
     if (gameEnded) return;
@@ -72,8 +129,32 @@ export default function App() {
     initializeGame();
   };
 
+  if (!sessionChecked) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100 flex items-center justify-center text-amber-800">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!player) {
+    return <AuthScreen onAuthenticated={handleAuthenticated} onPlayAsGuest={handlePlayAsGuest} />;
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-amber-100 flex flex-col items-center justify-center p-8">
+      {/* Who is playing, with sign out (user) or sign in (guest) */}
+      <div className="flex flex-wrap items-center justify-center gap-3 mb-4 text-sm text-amber-800">
+        {player.kind === 'user' ? (
+          <span>Signed in as <strong>{player.user.username}</strong></span>
+        ) : (
+          <span>Playing as Guest — scores are not saved</span>
+        )}
+        <Button size="sm" variant="outline" onClick={handleLeave}>
+          {player.kind === 'user' ? 'Sign Out' : 'Sign In'}
+        </Button>
+      </div>
+
       <div className="text-center mb-8">
         <h1 className="text-4xl mb-4 text-amber-900">🏴‍☠️ Treasure Hunt Game 🏴‍☠️</h1>
         <p className="text-amber-800 mb-4">
@@ -202,6 +283,13 @@ export default function App() {
                     ? 'Treasure found! Well done, treasure hunter! 🎉' 
                     : 'No treasure found this time! Better luck next time! 💀'}
                 </p>
+                {player.kind === 'user' && saveStatus !== 'idle' && (
+                  <p className={`text-xs mt-2 ${saveStatus === 'error' ? 'text-red-600' : 'text-amber-700'}`}>
+                    {saveStatus === 'saving' && 'Saving score…'}
+                    {saveStatus === 'saved' && 'Score saved to your account ✓'}
+                    {saveStatus === 'error' && 'Could not save your score.'}
+                  </p>
+                )}
               </div>
               
               <Button 
@@ -212,6 +300,12 @@ export default function App() {
               </Button>
             </motion.div>
           )}
+
+      {player.kind === 'user' && stats && (
+        <div className="w-full flex justify-center mt-4">
+          <ScoreHistory stats={stats} />
+        </div>
+      )}
     </div>
   );
 }

@@ -2,9 +2,10 @@
   import { defineConfig } from 'vite';
   import react from '@vitejs/plugin-react-swc';
   import path from 'path';
+  import { treasureApiPlugin } from './server/api';
 
   export default defineConfig({
-    plugins: [react()],
+    plugins: [react(), treasureApiPlugin()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
       alias: {
@@ -56,5 +57,7 @@
     server: {
       port: 3000,
       open: true,
+      // SQLite writes (data/treasure.db*) should not trigger the file watcher
+      watch: { ignored: ['**/data/**'] },
     },
   });
