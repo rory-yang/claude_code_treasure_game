@@ -5,6 +5,8 @@
   import { treasureApiPlugin } from './server/api';
 
   export default defineConfig({
+    // Relative asset paths so the build works under GitHub Pages' /<repo>/ subpath
+    base: './',
     plugins: [react(), treasureApiPlugin()],
     resolve: {
       extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
