@@ -4,6 +4,7 @@ import { Button } from './components/ui/button';
 import closedChest from './assets/treasure_closed.png';
 import treasureChest from './assets/treasure_opened.png';
 import skeletonChest from './assets/treasure_opened_skeleton.png';
+import keyIcon from './assets/key.png';
 import chestOpenSound from './audios/chest_open.mp3';
 import evilLaughSound from './audios/chest_open_with_evil_laugh.mp3';
 
@@ -39,7 +40,13 @@ export default function App() {
 
   const openBox = (boxId: number) => {
     if (gameEnded) return;
-    
+
+    // Play the chest opening sound only when a closed box is clicked (evil laugh for skeleton)
+    const targetBox = boxes.find(box => box.id === boxId);
+    if (targetBox && !targetBox.isOpen) {
+      new Audio(targetBox.hasTreasure ? chestOpenSound : evilLaughSound).play();
+    }
+
     setBoxes(prevBoxes => {
       const updatedBoxes = prevBoxes.map(box => {
         if (box.id === boxId && !box.isOpen) {
@@ -83,6 +90,21 @@ export default function App() {
           <span className={`${score >= 0 ? 'text-green-600' : 'text-red-600'}`}>
             ${score}
           </span>
+
+          {/* Show win / tie / loss below the current score based on the final score */}
+          {gameEnded && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+              className="mt-2"
+            >
+              <span className="text-amber-900">Result: </span>
+              <span className={score > 0 ? 'text-green-600' : score === 0 ? 'text-amber-600' : 'text-red-600'}>
+                {score > 0 ? 'Win' : score === 0 ? 'Tie' : 'Loss'}
+              </span>
+            </motion.div>
+          )}
         </div>
       </div>
 
@@ -91,6 +113,8 @@ export default function App() {
               <motion.div
                 key={box.id}
                 className="flex flex-col items-center cursor-pointer"
+                // Use the key icon as cursor while hovering a closed chest
+                style={box.isOpen ? undefined : { cursor: `url(${keyIcon}) 24 24, pointer` }}
                 whileHover={{ scale: box.isOpen ? 1 : 1.05 }}
                 whileTap={{ scale: box.isOpen ? 1 : 0.95 }}
                 onClick={() => openBox(box.id)}
